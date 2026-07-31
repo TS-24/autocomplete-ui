@@ -8,8 +8,14 @@ import { Input } from "../components/ui/input";
 import {
   getBaseUrl,
   getDataMode,
+  getEffortSettings,
+  listCapacity,
+  removeEffortCourseOverride,
   setBaseUrl,
+  setCapacityHours,
   setDataMode,
+  setEffortCourseOverride,
+  setEffortDefault,
   type DataMode,
 } from "../db/repo/settings.repo";
 import {
@@ -184,6 +190,209 @@ function ConnectionSection() {
   );
 }
 
+const WEEKDAY_ROWS: { key: string; label: string }[] = [
+  { key: "mon", label: "Monday" },
+  { key: "tue", label: "Tuesday" },
+  { key: "wed", label: "Wednesday" },
+  { key: "thu", label: "Thursday" },
+  { key: "fri", label: "Friday" },
+  { key: "sat", label: "Saturday" },
+  { key: "sun", label: "Sunday" },
+];
+
+function CapacitySection() {
+  const queryClient = useQueryClient();
+  const { data: capacity } = useQuery({
+    queryKey: ["capacity", "profile"],
+    queryFn: listCapacity,
+  });
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  const save = useMutation({
+    mutationFn: async ({ id, hours }: { id: string; hours: number }) => {
+      await setCapacityHours(id, hours);
+      queryClient.invalidateQueries({ queryKey: ["capacity", "profile"] });
+      queryClient.invalidateQueries({ queryKey: ["capacity"] });
+    },
+  });
+
+  return (
+    <Card
+      title="Capacity"
+      description="Your available hours per weekday. Commitments and scheduled tasks are packed against these."
+    >
+      <div className="flex flex-col gap-2">
+        {WEEKDAY_ROWS.map((row) => {
+          const value = capacity ? (capacity[row.key] ?? 0) : 0;
+          const draft = drafts[row.key] ?? String(value);
+          return (
+            <div key={row.key} className="flex items-center justify-between">
+              <span className="text-sm text-zinc-300">{row.label}</span>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  max={16}
+                  step={0.5}
+                  value={draft}
+                  onChange={(e) =>
+                    setDrafts((d) => ({ ...d, [row.key]: e.target.value }))
+                  }
+                  onBlur={() => {
+                    const hours = Number.parseFloat(draft);
+                    const next = Number.isFinite(hours) && hours >= 0 ? hours : 0;
+                    if (next !== value) {
+                      void save.mutateAsync({ id: row.key, hours: next });
+                    }
+                    setDrafts((d) => ({ ...d, [row.key]: String(next) }));
+                  }}
+                  className="w-20 text-right"
+                  aria-label={`${row.label} hours`}
+                />
+                <span className="w-8 text-xs text-zinc-500">h</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+const SOURCE_ROWS = ["assignment", "email", "manual"] as const;
+
+function EffortSection() {
+  const queryClient = useQueryClient();
+  const { data: effortSettings } = useQuery({
+    queryKey: ["settings", "effortDefaults"],
+    queryFn: getEffortSettings,
+  });
+  const [sourceDrafts, setSourceDrafts] = useState<Record<string, string>>({});
+  const [newCourse, setNewCourse] = useState("");
+  const [newMinutes, setNewMinutes] = useState("");
+
+  const setDefault = useMutation({
+    mutationFn: async ({ source, minutes }: { source: string; minutes: number }) => {
+      const next = await setEffortDefault(source, minutes);
+      queryClient.setQueryData(["settings", "effortDefaults"], next);
+      queryClient.invalidateQueries({ queryKey: ["capacity"] });
+      return next;
+    },
+  });
+
+  const setOverride = useMutation({
+    mutationFn: async ({ course, minutes }: { course: string; minutes: number }) => {
+      const next = await setEffortCourseOverride(course, minutes);
+      queryClient.setQueryData(["settings", "effortDefaults"], next);
+      queryClient.invalidateQueries({ queryKey: ["capacity"] });
+      return next;
+    },
+  });
+
+  const removeOverride = useMutation({
+    mutationFn: async (course: string) => {
+      const next = await removeEffortCourseOverride(course);
+      queryClient.setQueryData(["settings", "effortDefaults"], next);
+      queryClient.invalidateQueries({ queryKey: ["capacity"] });
+      return next;
+    },
+  });
+
+  const overrides = effortSettings?.effortCourseOverrides ?? {};
+
+  return (
+    <Card
+      title="Effort defaults"
+      description="Fallback estimates used before a task has an explicit effort. Course overrides beat source defaults."
+    >
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          {SOURCE_ROWS.map((source) => {
+            const current = effortSettings?.effortDefaults[source] ?? 180;
+            const draft = sourceDrafts[source] ?? String(current);
+            return (
+              <div key={source} className="flex items-center justify-between">
+                <span className="text-sm capitalize text-zinc-300">{source}</span>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    step={15}
+                    value={draft}
+                    onChange={(e) =>
+                      setSourceDrafts((d) => ({ ...d, [source]: e.target.value }))
+                    }
+                    onBlur={() => {
+                      const minutes = Number.parseInt(draft, 10);
+                      const next = Number.isFinite(minutes) && minutes >= 0 ? minutes : current;
+                      if (next !== current) void setDefault.mutate({ source, minutes: next });
+                      setSourceDrafts((d) => ({ ...d, [source]: String(next) }));
+                    }}
+                    className="w-20 text-right"
+                    aria-label={`${source} default minutes`}
+                  />
+                  <span className="w-8 text-xs text-zinc-500">min</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-col gap-2 border-t border-zinc-800 pt-3">
+          <span className="text-xs font-medium text-zinc-400">Course overrides</span>
+          {Object.entries(overrides).map(([course, minutes]) => (
+            <div key={course} className="flex items-center justify-between">
+              <span className="text-sm text-zinc-300">{course}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500">{minutes} min</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void removeOverride.mutate(course)}
+                  className="text-zinc-500 hover:text-rose-400"
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          ))}
+          <div className="mt-1 flex items-center gap-2">
+            <Input
+              value={newCourse}
+              onChange={(e) => setNewCourse(e.target.value)}
+              placeholder="Course name"
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              min={0}
+              step={15}
+              value={newMinutes}
+              onChange={(e) => setNewMinutes(e.target.value)}
+              placeholder="Minutes"
+              className="w-24"
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!newCourse.trim() || !newMinutes.trim()}
+              onClick={() => {
+                const minutes = Number.parseInt(newMinutes, 10);
+                if (!Number.isFinite(minutes) || minutes < 0) return;
+                void setOverride.mutate({ course: newCourse.trim(), minutes });
+                setNewCourse("");
+                setNewMinutes("");
+              }}
+            >
+              Add
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function Settings() {
   return (
     <div className="mx-auto max-w-3xl px-8 py-10">
@@ -198,12 +407,8 @@ function Settings() {
       </header>
       <div className="flex flex-col gap-6">
         <ConnectionSection />
-        <Card title="Coming soon">
-          <p className="text-xs text-zinc-500">
-            Capacity profile (hours per weekday) and effort defaults arrive with
-            the planning layer (PR #5).
-          </p>
-        </Card>
+        <CapacitySection />
+        <EffortSection />
       </div>
     </div>
   );
