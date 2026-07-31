@@ -150,7 +150,7 @@ export async function upsertTasks(rows: TaskWrite[]): Promise<void> {
 export async function updateTask(
   id: string,
   patch: Partial<
-    Pick<Task, "title" | "description" | "status" | "priority" | "effortMinutes" | "dueAt" | "course">
+    Pick<Task, "title" | "description" | "status" | "priority" | "effortMinutes" | "dueAt" | "course" | "completedAt">
   >,
   pinnedFields: string[],
 ): Promise<void> {
@@ -164,4 +164,83 @@ export async function updateTask(
 
   const next: Task = { ...existing, ...patch, overrides };
   await upsertTasks([toTaskWrite(next)]);
+}
+
+/** Soft archive — never deletes user data (domain-model §5). */
+export async function archiveTask(id: string, now: number): Promise<void> {
+  const existing = await getTask(id);
+  if (!existing) return;
+  const next: Task = {
+    ...existing,
+    archivedAt: new Date(now),
+    updatedAt: new Date(now),
+  };
+  await upsertTasks([toTaskWrite(next)]);
+}
+
+/** Manual task created by the user (originKind = manual, domain-model §2.5). */
+export async function createManualTask(input: {
+  title: string;
+  course?: string | null;
+  dueAt?: number | null;
+  effortMinutes?: number | null;
+  priority?: number;
+  status: TaskStatus;
+  now?: number;
+}): Promise<void> {
+  const now = input.now ?? Date.now();
+  const row: TaskWrite = {
+    id: crypto.randomUUID(),
+    title: input.title.trim(),
+    description: null,
+    originKind: "manual",
+    originExternalId: null,
+    originConnectorId: null,
+    originEntityType: null,
+    status: input.status,
+    priority: input.priority ?? -1,
+    effortMinutes: input.effortMinutes ?? null,
+    dueAt: input.dueAt ?? null,
+    course: input.course || null,
+    source: "manual",
+    overrides: {},
+    completedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    archivedAt: null,
+  };
+  await upsertTasks([row]);
+}
+
+/** Email promotion (domain-model §2.4) — permanent, recorded via overrides. */
+export async function promoteEmailToTask(email: {
+  externalId: string;
+  connectorId: string;
+  subject: string;
+  sender: string;
+  body?: string | null;
+}, opts: { status?: TaskStatus; now?: number } = {}): Promise<void> {
+  const now = opts.now ?? Date.now();
+  const snippet = (email.body ?? "").trim().replace(/\s+/g, " ").slice(0, 140);
+  const row: TaskWrite = {
+    id: crypto.randomUUID(),
+    title: email.subject.trim() || "(no subject)",
+    description: email.sender ? `${email.sender} — ${snippet}` : snippet || null,
+    originKind: "email",
+    originExternalId: email.externalId,
+    originConnectorId: email.connectorId,
+    originEntityType: "email",
+    status: opts.status ?? "backlog",
+    priority: -1,
+    effortMinutes: null,
+    dueAt: null,
+    course: null,
+    source: "gmail",
+    overrides: { promoted: true },
+    completedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    archivedAt: null,
+  };
+  await upsertTasks([row]);
 }

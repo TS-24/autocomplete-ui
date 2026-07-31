@@ -60,6 +60,21 @@ export async function listMirror(opts: {
   });
 }
 
+/** Unread email snapshots (payload.is_read === false), newest first. */
+export async function listUnreadEmails(limit = 10): Promise<MirrorEntity[]> {
+  const rows = await db.query.mirrorEntities.findMany({
+    where: and(
+      eq(mirrorEntities.entityType, "email"),
+      isNull(mirrorEntities.deletedAt),
+    ),
+    orderBy: (m, { desc }) => [desc(m.updatedAt)],
+    limit: Math.max(limit * 4, 50), // fetch generously, filter in TS (portable SQL)
+  });
+  return rows
+    .filter((r) => (r.payload as Record<string, unknown>)?.is_read === false)
+    .slice(0, limit);
+}
+
 export async function listMirrorByConnector(): Promise<
   Record<string, number>
 > {
