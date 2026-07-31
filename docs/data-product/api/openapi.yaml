@@ -1,0 +1,712 @@
+# EXTERNAL REFERENCE - PKS DATA PRODUCT. This spec describes the PKS data product API
+# (backend in Autocomplete/), NOT the autocomplete-ui project. Reference only; do not modify.
+# Source of truth: Autocomplete/docs/api/openapi.yaml
+openapi: 3.1.0
+info:
+  title: Personal Knowledge Stream API
+  description: |
+    REST API for the Personal Knowledge Stream (PKS) platform.
+    Continuously ingests data from external systems and exposes normalized events.
+  version: 0.1.0
+  contact:
+    name: PKS
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      security: []
+      tags: [System]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /auth/keys:
+    post:
+      summary: Create API key
+      operationId: createApiKey
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateApiKeyRequest"
+      responses:
+        "201":
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateApiKeyResponse"
+    get:
+      summary: List API keys
+      operationId: listApiKeys
+      tags: [Auth]
+      responses:
+        "200":
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyListResponse"
+
+  /auth/keys/{key_id}:
+    delete:
+      summary: Revoke API key
+      operationId: revokeApiKey
+      tags: [Auth]
+      parameters:
+        - $ref: "#/components/parameters/KeyId"
+      responses:
+        "204":
+          description: Key revoked
+
+  /auth/google/authorize:
+    get:
+      summary: Start Google OAuth flow
+      operationId: googleAuthorize
+      security: []
+      tags: [Auth]
+      parameters:
+        - name: connector_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "302":
+          description: Redirect to Google consent
+
+  /auth/google/callback:
+    get:
+      summary: Google OAuth callback
+      operationId: googleCallback
+      security: []
+      tags: [Auth]
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Authorization complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthCallbackResponse"
+
+  /events:
+    get:
+      summary: Query events
+      operationId: listEvents
+      tags: [Events]
+      parameters:
+        - name: type
+          in: query
+          schema:
+            $ref: "#/components/schemas/EventType"
+        - name: source
+          in: query
+          schema:
+            type: string
+        - name: connector_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: until
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Paginated events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventListResponse"
+
+  /events/{event_id}:
+    get:
+      summary: Get event by ID
+      operationId: getEvent
+      tags: [Events]
+      parameters:
+        - $ref: "#/components/parameters/EventId"
+      responses:
+        "200":
+          description: Event details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /snapshots:
+    get:
+      summary: Query snapshots
+      operationId: listSnapshots
+      tags: [Snapshots]
+      parameters:
+        - name: connector_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+        - name: external_id
+          in: query
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Paginated snapshots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotListResponse"
+
+  /snapshots/{snapshot_id}:
+    get:
+      summary: Get snapshot by ID
+      operationId: getSnapshot
+      tags: [Snapshots]
+      parameters:
+        - $ref: "#/components/parameters/SnapshotId"
+      responses:
+        "200":
+          description: Snapshot details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Snapshot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /connectors:
+    post:
+      summary: Create connector
+      operationId: createConnector
+      tags: [Connectors]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectorCreate"
+      responses:
+        "201":
+          description: Connector created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connector"
+    get:
+      summary: List connectors
+      operationId: listConnectors
+      tags: [Connectors]
+      responses:
+        "200":
+          description: List of connectors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorListResponse"
+
+  /connectors/{connector_id}:
+    get:
+      summary: Get connector
+      operationId: getConnector
+      tags: [Connectors]
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
+      responses:
+        "200":
+          description: Connector details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connector"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      summary: Update connector
+      operationId: updateConnector
+      tags: [Connectors]
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectorUpdate"
+      responses:
+        "200":
+          description: Connector updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connector"
+    delete:
+      summary: Delete connector
+      operationId: deleteConnector
+      tags: [Connectors]
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
+      responses:
+        "204":
+          description: Connector deleted
+
+  /connectors/{connector_id}/sync:
+    post:
+      summary: Trigger manual sync
+      operationId: triggerSync
+      tags: [Connectors]
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
+      responses:
+        "202":
+          description: Sync queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncTriggerResponse"
+        "409":
+          description: Sync already in progress
+
+  /connectors/{connector_id}/health:
+    get:
+      summary: Get connector health
+      operationId: getConnectorHealth
+      tags: [Connectors]
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
+      responses:
+        "200":
+          description: Connector health details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorHealth"
+
+  /connectors/{connector_id}/sync-runs:
+    get:
+      summary: List sync runs
+      operationId: listSyncRuns
+      tags: [Connectors]
+      parameters:
+        - $ref: "#/components/parameters/ConnectorId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Paginated sync runs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncRunListResponse"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 200
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+    EventId:
+      name: event_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SnapshotId:
+      name: snapshot_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ConnectorId:
+      name: connector_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    KeyId:
+      name: key_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, database]
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: "0.1.0"
+        database:
+          type: string
+          enum: [connected, disconnected]
+        uptime_seconds:
+          type: number
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+
+    EventType:
+      type: string
+      enum:
+        - assignment.created
+        - assignment.updated
+        - grade.posted
+        - email.received
+        - email.updated
+        - calendar_event.created
+        - calendar_event.updated
+        - calendar_event.deleted
+
+    Event:
+      type: object
+      required: [id, source, type, timestamp, payload, metadata, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+        type:
+          $ref: "#/components/schemas/EventType"
+        timestamp:
+          type: string
+          format: date-time
+        payload:
+          type: object
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    EventListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Event"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    Snapshot:
+      type: object
+      required: [id, connector_id, entity_type, external_id, data, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        connector_id:
+          type: string
+          format: uuid
+        entity_type:
+          type: string
+        external_id:
+          type: string
+        data:
+          type: object
+        version:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+
+    SnapshotListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Snapshot"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    ConnectorType:
+      type: string
+      enum: [gmail, google_calendar, d2l]
+
+    ConnectorStatus:
+      type: string
+      enum: [active, disabled, error]
+
+    ConnectorConfig:
+      type: object
+      properties:
+        schedule:
+          type: string
+          default: "*/15 * * * *"
+        enabled:
+          type: boolean
+          default: true
+        settings:
+          type: object
+
+    Connector:
+      type: object
+      required: [id, type, name, status, config]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/ConnectorType"
+        name:
+          type: string
+        status:
+          $ref: "#/components/schemas/ConnectorStatus"
+        config:
+          $ref: "#/components/schemas/ConnectorConfig"
+        last_sync_at:
+          type: string
+          format: date-time
+        last_sync_status:
+          type: string
+        error_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    ConnectorCreate:
+      type: object
+      required: [type, name]
+      properties:
+        type:
+          $ref: "#/components/schemas/ConnectorType"
+        name:
+          type: string
+        config:
+          $ref: "#/components/schemas/ConnectorConfig"
+
+    ConnectorUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        config:
+          $ref: "#/components/schemas/ConnectorConfig"
+        status:
+          $ref: "#/components/schemas/ConnectorStatus"
+
+    ConnectorListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Connector"
+        total:
+          type: integer
+
+    ConnectorHealth:
+      type: object
+      properties:
+        connector_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/ConnectorStatus"
+        is_healthy:
+          type: boolean
+        last_sync_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        error_count:
+          type: integer
+
+    SyncTriggerResponse:
+      type: object
+      properties:
+        sync_run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        message:
+          type: string
+
+    SyncRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        connector_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        items_collected:
+          type: integer
+        events_created:
+          type: integer
+        error:
+          type: string
+
+    SyncRunListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncRun"
+        total:
+          type: integer
+
+    CreateApiKeyRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    CreateApiKeyResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        key:
+          type: string
+        key_prefix:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ApiKeyListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              key_prefix:
+                type: string
+              created_at:
+                type: string
+                format: date-time
+              revoked_at:
+                type: string
+                format: date-time
+        total:
+          type: integer
+
+    OAuthCallbackResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        connector_id:
+          type: string
+          format: uuid
