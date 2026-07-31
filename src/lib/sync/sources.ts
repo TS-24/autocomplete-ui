@@ -1,3 +1,5 @@
+export type { EntityType } from "../../db/schema";
+import type { Task } from "../../db/schema";
 import type { EntityType } from "../../db/schema";
 
 /**
@@ -55,3 +57,34 @@ export const ENTITY_TYPES_FOR: Record<string, EntityType[]> = {
   google_calendar: ["calendar_event"],
   d2l: ["assignment", "grade"],
 };
+
+/** A mirror row as persisted: `SnapshotInfo` + tombstone flag. */
+export interface MirrorRow extends SnapshotInfo {
+  deletedAt: number | null;
+}
+
+/** Repo-side mirror, implemented by `SqliteSink` (live) and `MemorySink` (tests). */
+export interface SyncSink {
+  upsertConnectors(cs: ConnectorInfo[], now: number): Promise<void>;
+  tombstoneConnectors(liveIds: string[], now: number): Promise<void>;
+  listConnectors(): Promise<ConnectorInfo[]>;
+  upsertSnapshots(items: SnapshotInfo[], now: number): Promise<void>;
+  listMirror(includeDeleted?: boolean): Promise<MirrorRow[]>;
+  tombstoneMirror(
+    connectorId: string,
+    entityType: EntityType,
+    seen: Set<string>,
+    now: number,
+  ): Promise<void>;
+  upsertActivity(events: ActivityEvent[], now: number): Promise<void>;
+  listEvents(limit?: number): Promise<ActivityEvent[]>;
+  listTasks(includeArchived?: boolean): Promise<Task[]>;
+  getWatermark(connectorId: string, entityType: EntityType): Promise<number>;
+  setWatermark(
+    connectorId: string,
+    entityType: EntityType,
+    watermark: number,
+    now: number,
+  ): Promise<void>;
+  markFullReconcile(connectorId: string, entityType: EntityType, now: number): Promise<void>;
+}
