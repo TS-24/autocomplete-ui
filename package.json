@@ -16,9 +16,12 @@
     "@tanstack/react-query": "^5",
     "@tanstack/react-router": "^1",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-sql": "^2.4.0",
+    "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.28.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4",
@@ -27,12 +30,15 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "drizzle-kit": "^0.31.10",
     "tailwindcss": "^4",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vitest": "^4.1.10"
   },
   "allowScripts": {
-    "esbuild@0.28.1": true
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "fsevents@2.3.3": true
   }
 }
