@@ -22,6 +22,7 @@ export class PksError extends Error {
 export interface FetchOptions {
   path: string;
   query?: Record<string, string | number | boolean | undefined | null>;
+  method?: "GET" | "POST";
 }
 
 export async function pksFetch<T>(schema: z.ZodType<T>, opts: FetchOptions): Promise<T> {
@@ -33,7 +34,12 @@ export async function pksFetch<T>(schema: z.ZodType<T>, opts: FetchOptions): Pro
   }
   let raw: unknown;
   try {
-    raw = await invoke("pks_fetch", { baseUrl, path: opts.path, query });
+    raw = await invoke("pks_fetch", {
+      baseUrl,
+      path: opts.path,
+      query,
+      method: opts.method ?? "GET",
+    });
   } catch (e) {
     throw new PksError(String(e));
   }

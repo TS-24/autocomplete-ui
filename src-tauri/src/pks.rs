@@ -117,14 +117,15 @@ async fn get_pool(app: &AppHandle, state: &AppState) -> Result<sqlx::SqlitePool,
     Ok(pool)
 }
 
-/// GET a PKS API path with the key injected server-side. The webview never
-/// sees the key (docs/architecture.md §1).
+/// GET or POST a PKS API path with the key injected server-side. The webview
+/// never sees the key (docs/architecture.md §1).
 #[tauri::command]
 pub async fn pks_fetch(
     state: State<'_, AppState>,
     base_url: String,
     path: String,
     query: HashMap<String, String>,
+    method: Option<String>,
 ) -> Result<Value, String> {
     let key = get_cached_key(&state)?;
     let client = reqwest::Client::builder()
@@ -133,8 +134,13 @@ pub async fn pks_fetch(
         .build()
         .map_err(|e| e.to_string())?;
     let url = format!("{}{}", base_url.trim_end_matches('/'), path);
+    let method = match method.as_deref().unwrap_or("GET").to_uppercase().as_str() {
+        "GET" => reqwest::Method::GET,
+        "POST" => reqwest::Method::POST,
+        other => return Err(format!("unsupported method: {other}")),
+    };
     let response = client
-        .get(&url)
+        .request(method, &url)
         .query(&query)
         .header("X-API-Key", &key)
         .send()
