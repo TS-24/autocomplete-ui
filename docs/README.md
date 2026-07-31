@@ -4,9 +4,24 @@ Documentation index for the `autocomplete-ui` project.
 
 ## Project Documentation
 
-*This section is for documents that describe the autocomplete-ui project itself.*
+*This section describes the autocomplete-ui project itself.*
 
-> **Note:** The project has no project-specific docs yet.
+> **Start with [`plan.md`](./plan.md)** — it is the master plan and single source of truth.
+> If you are an agent implementing a feature, read the relevant docs below before writing
+> code, and follow the workflow in [`contributing.md`](./contributing.md).
+
+| Document | Description |
+|----------|-------------|
+| [Plan](./plan.md) | Master plan: goals, non-goals, phases, acceptance criteria, decision log |
+| [Architecture](./architecture.md) | Stack, process boundaries, Rust commands, security boundary, directory layout |
+| [API Contract](./api-contract.md) | The PKS API as this UI consumes it; audit findings; Zod rules; fixtures |
+| [Database Schema](./database-schema.md) | Drizzle schema, ownership rules, migration workflow, repo rules |
+| [Sync Engine](./sync-engine.md) | Three-tier polling, watermark reconcile, correctness properties |
+| [Domain Model](./domain-model.md) | Task/commitment/signal derivation, status normalization, override policy |
+| [Capacity Engine](./capacity-engine.md) | Effort estimation, backward-fill scheduler, explainable ranking |
+| [UI Spec](./ui.md) | Routes, view specs, component kit, design tokens, data wiring |
+| [Contributing](./contributing.md) | Git workflow, stacked PRs, verification, code rules |
+| [Backend Blockers](./backend-blockers.md) | What must be fixed in `../Autocomplete` for live data |
 
 ## Data Product Reference (External)
 
