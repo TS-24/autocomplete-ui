@@ -1,0 +1,18 @@
+[package]
+name = "autocomplete-ui"
+version = "0.1.0"
+description = "Personal knowledge stream desktop dashboard"
+authors = ["TS-24"]
+edition = "2021"
+
+[lib]
+name = "autocomplete_ui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
