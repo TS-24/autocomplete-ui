@@ -3,6 +3,11 @@ import { db } from "../client";
 import { mirrorEntities, type EntityType, type MirrorEntity } from "../schema";
 import { chunk, runBatch } from "../sql";
 import type { SnapshotInfo } from "../../lib/sync/sources";
+import {
+  calendarEventPayloadSchema,
+  gradePayloadSchema,
+  type GradePayload,
+} from "../../lib/pks/types";
 
 /**
  * The sync surface (docs/sync-engine.md §3). Written ONLY by the sync engine.
@@ -73,6 +78,58 @@ export async function listUnreadEmails(limit = 10): Promise<MirrorEntity[]> {
   return rows
     .filter((r) => (r.payload as Record<string, unknown>)?.is_read === false)
     .slice(0, limit);
+}
+
+export interface Commitment {
+  id: string;
+  title: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Non-cancelled calendar events overlapping [from, to) (domain-model §2.3).
+ * Invalid payloads are skipped defensively.
+ */
+export async function listCommitments(
+  from: number,
+  to: number,
+): Promise<Commitment[]> {
+  const rows = await db.query.mirrorEntities.findMany({
+    where: and(
+      eq(mirrorEntities.entityType, "calendar_event"),
+      isNull(mirrorEntities.deletedAt),
+    ),
+  });
+  const out: Commitment[] = [];
+  for (const row of rows) {
+    const parsed = calendarEventPayloadSchema.safeParse(row.payload);
+    if (!parsed.success) continue;
+    const p = parsed.data;
+    const start = new Date(p.start).getTime();
+    const end = new Date(p.end).getTime();
+    if (p.status === "cancelled" || end <= start) continue;
+    if (end > from && start < to) {
+      out.push({ id: row.id, title: p.title, start, end });
+    }
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/** All grade snapshots (non-deleted), for grade weights and trends. */
+export async function listGrades(): Promise<GradePayload[]> {
+  const rows = await db.query.mirrorEntities.findMany({
+    where: and(
+      eq(mirrorEntities.entityType, "grade"),
+      isNull(mirrorEntities.deletedAt),
+    ),
+  });
+  const out: GradePayload[] = [];
+  for (const row of rows) {
+    const parsed = gradePayloadSchema.safeParse(row.payload);
+    if (parsed.success) out.push(parsed.data);
+  }
+  return out;
 }
 
 export async function listMirrorByConnector(): Promise<

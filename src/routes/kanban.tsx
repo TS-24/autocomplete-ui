@@ -38,17 +38,16 @@ import {
   updateTask,
 } from "../db/repo/tasks.repo";
 import { listUnreadEmails } from "../db/repo/mirror.repo";
-import { getSetting } from "../db/repo/settings.repo";
+import { getEffortSettings } from "../db/repo/settings.repo";
 import type { MirrorEntity, Task, TaskStatus } from "../db/schema";
 import { emailPayloadSchema } from "../lib/pks/types";
+import { effectiveEffort, type EffortSettings } from "../lib/schedule/effort";
 import {
-  effortMinutesFor,
   formatEffort,
   groupTasksByStatus,
   isOverdue,
   KANBAN_COLUMNS,
   statusFromDropTarget,
-  type EffortDefaults,
 } from "../lib/kanban";
 import { formatRelative } from "../lib/time";
 
@@ -62,12 +61,12 @@ const ORIGIN_BADGE: Record<string, { label: string; tone: "accent" | "ok" | "def
   manual: { label: "manual", tone: "default" },
 };
 
-function useEffortDefaults(): EffortDefaults {
+function useEffortSettings(): EffortSettings {
   const { data } = useQuery({
     queryKey: ["settings", "effortDefaults"],
-    queryFn: () => getSetting("effortDefaults", { assignment: 180, email: 15 }),
+    queryFn: getEffortSettings,
   });
-  return data ?? {};
+  return data ?? { effortDefaults: {}, effortCourseOverrides: {} };
 }
 
 function PriorityDots({ value }: { value: number }) {
@@ -88,10 +87,10 @@ function PriorityDots({ value }: { value: number }) {
 interface CardActionsProps {
   task: Task;
   onArchive: (id: string) => void;
-  effortDefaults: EffortDefaults;
+  effortSettings: EffortSettings;
 }
 
-function CardActions({ task, onArchive, effortDefaults }: CardActionsProps) {
+function CardActions({ task, onArchive, effortSettings }: CardActionsProps) {
   const queryClient = useQueryClient();
   const [editingEffort, setEditingEffort] = useState(false);
   const [effortDraft, setEffortDraft] = useState("");
@@ -107,6 +106,7 @@ function CardActions({ task, onArchive, effortDefaults }: CardActionsProps) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({ queryKey: ["capacity"] });
     },
   });
 
@@ -166,13 +166,13 @@ function CardActions({ task, onArchive, effortDefaults }: CardActionsProps) {
       ) : (
         <button
           onClick={() => {
-            setEffortDraft(formatEffort(effortMinutesFor(task, effortDefaults)));
+            setEffortDraft(formatEffort(effectiveEffort(task, effortSettings)));
             setEditingEffort(true);
           }}
           className="rounded border border-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200"
           title="edit effort"
         >
-          {formatEffort(effortMinutesFor(task, effortDefaults))}
+          {formatEffort(effectiveEffort(task, effortSettings))}
         </button>
       )}
 
@@ -199,10 +199,10 @@ function CardActions({ task, onArchive, effortDefaults }: CardActionsProps) {
 interface TaskCardProps {
   task: Task;
   onArchive: (id: string) => void;
-  effortDefaults: EffortDefaults;
+  effortSettings: EffortSettings;
 }
 
-function TaskCard({ task, onArchive, effortDefaults }: TaskCardProps) {
+function TaskCard({ task, onArchive, effortSettings }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -213,7 +213,7 @@ function TaskCard({ task, onArchive, effortDefaults }: TaskCardProps) {
   } = useSortable({ id: task.id });
   const origin = ORIGIN_BADGE[task.originKind ?? "manual"] ?? ORIGIN_BADGE.manual;
   const overdue = isOverdue(task);
-  const effort = effortMinutesFor(task, effortDefaults);
+  const effort = effectiveEffort(task, effortSettings);
 
   return (
     <div
@@ -241,7 +241,7 @@ function TaskCard({ task, onArchive, effortDefaults }: TaskCardProps) {
         <span className="text-[11px] text-zinc-500">{formatEffort(effort)}</span>
       </div>
       <div className="mt-2 opacity-0 transition-opacity group-hover:opacity-100">
-        <CardActions task={task} onArchive={onArchive} effortDefaults={effortDefaults} />
+        <CardActions task={task} onArchive={onArchive} effortSettings={effortSettings} />
       </div>
     </div>
   );
@@ -253,10 +253,10 @@ interface ColumnProps {
   tasks: Task[];
   onNewTask: (status: TaskStatus) => void;
   onArchive: (id: string) => void;
-  effortDefaults: EffortDefaults;
+  effortSettings: EffortSettings;
 }
 
-function Column({ id, label, tasks, onNewTask, onArchive, effortDefaults }: ColumnProps) {
+function Column({ id, label, tasks, onNewTask, onArchive, effortSettings }: ColumnProps) {
   const { setNodeRef, isOver } = useSortable({ id: `column-${id}` });
   return (
     <section
@@ -280,7 +280,7 @@ function Column({ id, label, tasks, onNewTask, onArchive, effortDefaults }: Colu
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2 pt-0">
         <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           {tasks.map((t) => (
-            <TaskCard key={t.id} task={t} onArchive={onArchive} effortDefaults={effortDefaults} />
+            <TaskCard key={t.id} task={t} onArchive={onArchive} effortSettings={effortSettings} />
           ))}
         </SortableContext>
         {tasks.length === 0 && (
@@ -328,6 +328,7 @@ function NewTaskDialog({
       setPriority("-1");
       onClose();
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({ queryKey: ["capacity"] });
     },
   });
 
@@ -394,7 +395,7 @@ function NewTaskDialog({
   );
 }
 
-function InboxStrip({ effortDefaults }: { effortDefaults: EffortDefaults }) {
+function InboxStrip({ effortSettings }: { effortSettings: EffortSettings }) {
   const queryClient = useQueryClient();
   const { data: emails } = useQuery({
     queryKey: ["mirror", "email", "unread"],
@@ -428,6 +429,7 @@ function InboxStrip({ effortDefaults }: { effortDefaults: EffortDefaults }) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({ queryKey: ["capacity"] });
     },
   });
 
@@ -469,7 +471,8 @@ function InboxStrip({ effortDefaults }: { effortDefaults: EffortDefaults }) {
         })}
       </ul>
       <footer className="px-5 py-2 text-[11px] text-zinc-600">
-        Promoted emails become tasks in Backlog ({effortDefaults.email ?? 15}m estimated).
+        Promoted emails become tasks in Backlog (
+        {effortSettings.effortDefaults.email ?? 15}m estimated).
       </footer>
     </div>
   );
@@ -477,7 +480,7 @@ function InboxStrip({ effortDefaults }: { effortDefaults: EffortDefaults }) {
 
 function Kanban() {
   const queryClient = useQueryClient();
-  const effortDefaults = useEffortDefaults();
+  const effortSettings = useEffortSettings();
   const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus | null>(null);
 
   const { data: tasks = [], isLoading, isError, refetch } = useQuery({
@@ -489,14 +492,20 @@ function Kanban() {
     mutationFn: async ({ id, status }: { id: string; status: TaskStatus }) => {
       await updateTask(id, { status }, ["status"]);
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["tasks"] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({ queryKey: ["capacity"] });
+    },
   });
 
   const archive = useMutation({
     mutationFn: async (id: string) => {
       await archiveTask(id, Date.now());
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["tasks"] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({ queryKey: ["capacity"] });
+    },
   });
 
   const sensors = useSensors(
@@ -537,7 +546,7 @@ function Kanban() {
         </div>
       </header>
 
-      <InboxStrip effortDefaults={effortDefaults} />
+      <InboxStrip effortSettings={effortSettings} />
 
       {isLoading && (
         <div className="flex flex-1 gap-4">
@@ -563,7 +572,7 @@ function Kanban() {
                 tasks={groups[col.id]}
                 onNewTask={setNewTaskStatus}
                 onArchive={(id) => void archive.mutate(id)}
-                effortDefaults={effortDefaults}
+                effortSettings={effortSettings}
               />
             ))}
           </div>

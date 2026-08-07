@@ -12,6 +12,54 @@ export const DEFAULT_SETTINGS = {
 
 export type DataMode = "fixture" | "live";
 
+export interface EffortSettings {
+  /** Per-source fallback minutes (e.g. { assignment: 180, email: 15 }). */
+  effortDefaults: Record<string, number>;
+  /** Per-course overrides, keyed by course name. */
+  effortCourseOverrides: Record<string, number>;
+}
+
+export async function getEffortSettings(): Promise<EffortSettings> {
+  const [defaults, overrides] = await Promise.all([
+    getSetting("effortDefaults", DEFAULT_SETTINGS.effortDefaults),
+    getSetting("effortCourseOverrides", DEFAULT_SETTINGS.effortCourseOverrides),
+  ]);
+  return {
+    effortDefaults: defaults as Record<string, number>,
+    effortCourseOverrides: overrides as Record<string, number>,
+  };
+}
+
+export async function setEffortDefault(
+  source: string,
+  minutes: number,
+): Promise<EffortSettings> {
+  const current = await getEffortSettings();
+  const next = { ...current.effortDefaults, [source]: minutes };
+  await setSetting("effortDefaults", next);
+  return { ...current, effortDefaults: next };
+}
+
+export async function setEffortCourseOverride(
+  course: string,
+  minutes: number,
+): Promise<EffortSettings> {
+  const current = await getEffortSettings();
+  const next = { ...current.effortCourseOverrides, [course]: minutes };
+  await setSetting("effortCourseOverrides", next);
+  return { ...current, effortCourseOverrides: next };
+}
+
+export async function removeEffortCourseOverride(
+  course: string,
+): Promise<EffortSettings> {
+  const current = await getEffortSettings();
+  const next = { ...current.effortCourseOverrides };
+  delete next[course];
+  await setSetting("effortCourseOverrides", next);
+  return { ...current, effortCourseOverrides: next };
+}
+
 export const DEFAULT_CAPACITY: Record<string, number> = {
   mon: 4,
   tue: 4,
